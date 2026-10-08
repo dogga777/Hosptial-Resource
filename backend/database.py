@@ -10,7 +10,12 @@ load_dotenv(BASE_DIR / ".env")
 MONGO_URI = os.getenv("MONGO_URI") or "mongodb://localhost:27017"
 DB_NAME = os.getenv("DB_NAME", "hospital_rebalancer")
 
-client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+client = AsyncIOMotorClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=10000,
+    connectTimeoutMS=10000,
+    socketTimeoutMS=20000,
+)
 db = client[DB_NAME]
 
 

@@ -176,8 +176,15 @@ Once the service is live:
 1. Open `https://YOUR-RENDER-SERVICE.onrender.com/`; it redirects to the UI.
 2. Check `https://YOUR-RENDER-SERVICE.onrender.com/healthz` for the health
    response.
-3. Click **Seed demo** once to initialize the hospital inventory.
-4. Use **Detect & transfer** or **Simulate demand** to exercise transfers.
+3. Check `https://YOUR-RENDER-SERVICE.onrender.com/api/health` to verify the
+   service can reach MongoDB Atlas.
+4. Click **Seed demo** once to initialize the hospital inventory.
+5. Use **Detect & transfer** or **Simulate demand** to exercise transfers.
+
+If `/api/health` reports that MongoDB is unreachable, confirm the Render
+`MONGO_URI` secret is the Atlas connection string for the correct database
+user, and allow Render connections in Atlas **Network Access**. The dashboard
+shows the last successfully loaded snapshot while reporting a refresh error.
 
 The dashboard and API are served by the same service; no separate frontend
 hosting or CORS configuration is needed.

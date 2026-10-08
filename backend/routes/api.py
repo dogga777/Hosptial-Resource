@@ -1,3 +1,4 @@
+import logging
 import random
 from datetime import datetime, timezone
 
@@ -12,6 +13,7 @@ from backend.rebalancer import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 db = get_database()
 collection = db["hospitals"]
 transfer_collection = db["transfers"]
@@ -144,6 +146,7 @@ async def auto_transfer_oxygen():
 
         return completed_transfers
     except Exception as exc:
+        logger.exception("Automatic oxygen transfer failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Could not complete the simulated oxygen transfer.") from exc
 
 
@@ -154,6 +157,7 @@ async def get_dashboard():
         hospitals = [format_hospital(hospital) for hospital in hospital_docs]
         transfer_docs = await transfer_collection.find().sort("created_at", -1).limit(5).to_list(length=5)
     except Exception as exc:
+        logger.exception("Dashboard database query failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Hospital dashboard data is currently unavailable.") from exc
 
     critical = sum(1 for h in hospitals if h["risk"] == "critical")
@@ -189,6 +193,19 @@ async def get_dashboard():
             for transfer in transfer_docs
         ],
     }
+
+
+@router.get("/health")
+async def database_health():
+    try:
+        await db.command("ping")
+        return {"status": "ok", "database": "connected"}
+    except Exception as exc:
+        logger.exception("MongoDB health check failed (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="MongoDB is unreachable. Check the Render MONGO_URI and MongoDB Atlas Network Access list.",
+        ) from exc
 
 
 @router.post("/seed")

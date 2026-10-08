@@ -8,7 +8,13 @@ let refreshInProgress = false;
 async function api(url, options = {}) {
   const response = await fetch(url, options);
   if (!response.ok) {
-    const detail = await response.text();
+    const body = await response.text();
+    let detail = body;
+    try {
+      detail = JSON.parse(body).detail || body;
+    } catch {
+      detail = body;
+    }
     throw new Error(detail || `Request failed (${response.status})`);
   }
   return response.json();
@@ -246,7 +252,8 @@ async function refresh() {
     render(await api("/api/dashboard"));
   } catch (error) {
     setStatus("Connection issue", "error");
-    setTableMessage("Could not refresh hospital data. Check the backend and database connection, then try again.");
+    const detail = String(error.message || "Unknown network error").slice(0, 220);
+    setTableMessage(`Could not refresh hospital data: ${detail} Check the backend and database connection, then try again.`);
     console.error("Dashboard refresh failed:", error);
     if (hospitals.length === 0) {
       $("hospitalTable").innerHTML = '<tr><td class="loading-cell" colspan="8">Unable to load data. Check the backend connection or seed the demo.</td></tr>';
