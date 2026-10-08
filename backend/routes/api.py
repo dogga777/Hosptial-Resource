@@ -3,7 +3,9 @@ import random
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
+from pymongo.errors import ConfigurationError, OperationFailure, ServerSelectionTimeoutError
 
+from backend import database
 from backend.database import get_database
 from backend.rebalancer import (
     DONOR_RESERVE_HOURS,
@@ -17,6 +19,20 @@ logger = logging.getLogger(__name__)
 db = get_database()
 collection = db["hospitals"]
 transfer_collection = db["transfers"]
+
+
+def database_error_detail(error):
+    if not database.MONGO_URI_CONFIGURED:
+        return "MONGO_URI is not configured. Add the MongoDB Atlas connection string to the Render service environment."
+    if isinstance(error, OperationFailure) and error.code == 18:
+        return "MongoDB rejected the database credentials. Check the Atlas database user, password, and authentication database."
+    if isinstance(error, (ServerSelectionTimeoutError, TimeoutError)):
+        return "MongoDB could not be reached. Check the Atlas cluster hostname and allow the Render service to connect in Atlas Network Access."
+    if isinstance(error, ConfigurationError):
+        return "MONGO_URI is invalid. Check the Atlas connection string format and URL-encode special characters in the password."
+    if isinstance(error, OperationFailure):
+        return "MongoDB denied this operation. Check that the Atlas database user has read/write access to the configured database."
+    return "MongoDB request failed. Check the Render service logs and database connection settings."
 
 
 def format_hospital(h):
@@ -146,8 +162,8 @@ async def auto_transfer_oxygen():
 
         return completed_transfers
     except Exception as exc:
-        logger.exception("Automatic oxygen transfer failed (%s)", type(exc).__name__)
-        raise HTTPException(status_code=503, detail="Could not complete the simulated oxygen transfer.") from exc
+        logger.error("Automatic oxygen transfer failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=database_error_detail(exc)) from exc
 
 
 @router.get("/dashboard")
@@ -157,8 +173,8 @@ async def get_dashboard():
         hospitals = [format_hospital(hospital) for hospital in hospital_docs]
         transfer_docs = await transfer_collection.find().sort("created_at", -1).limit(5).to_list(length=5)
     except Exception as exc:
-        logger.exception("Dashboard database query failed (%s)", type(exc).__name__)
-        raise HTTPException(status_code=503, detail="Hospital dashboard data is currently unavailable.") from exc
+        logger.error("Dashboard database query failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=database_error_detail(exc)) from exc
 
     critical = sum(1 for h in hospitals if h["risk"] == "critical")
     high = sum(1 for h in hospitals if h["risk"] == "high")
@@ -201,11 +217,8 @@ async def database_health():
         await db.command("ping")
         return {"status": "ok", "database": "connected"}
     except Exception as exc:
-        logger.exception("MongoDB health check failed (%s)", type(exc).__name__)
-        raise HTTPException(
-            status_code=503,
-            detail="MongoDB is unreachable. Check the Render MONGO_URI and MongoDB Atlas Network Access list.",
-        ) from exc
+        logger.error("MongoDB health check failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=database_error_detail(exc)) from exc
 
 
 @router.post("/seed")
@@ -221,7 +234,8 @@ async def seed_database():
         await transfer_collection.delete_many({})
         return {"message": "Database seeded successfully!"}
     except Exception as exc:
-        return {"message": f"Seed skipped: database unavailable ({exc})"}
+        logger.error("Demo seed failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=database_error_detail(exc)) from exc
 
 
 @router.post("/simulate")
@@ -241,7 +255,8 @@ async def simulate_emergency():
     except Exception as exc:
         if isinstance(exc, HTTPException):
             raise
-        raise HTTPException(status_code=503, detail="Could not simulate the inventory update.") from exc
+        logger.error("Demand simulation failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail=database_error_detail(exc)) from exc
 
 
 @router.post("/auto-transfer")
@@ -262,11 +277,9 @@ async def gemini_explain(request: Request):
     data = await request.json()
     rec = data.get("recommendation", {})
 
-    explanation = (
-        f"Emergency transfer authorized. Moving {rec.get('quantity')} units from "
-        f"{rec.get('from_hospital')} to {rec.get('to_hospital')} is the safest option. "
-        "The receiving hospital will run out in under 6 hours, while the donor hospital "
-        "maintains a safe reserve for the next 24 hours."
+    explanation = rec.get("reason") or (
+        f"A simulated transfer of {rec.get('quantity')} cylinders from "
+        f"{rec.get('from_hospital')} to {rec.get('to_hospital')} is recommended."
     )
 
     return {"explanation": explanation}

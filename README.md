@@ -189,6 +189,14 @@ shows the last successfully loaded snapshot while reporting a refresh error.
 The dashboard and API are served by the same service; no separate frontend
 hosting or CORS configuration is needed.
 
+### Running backend checks
+
+From the project root:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s backend\tests
+```
+
 ### Updating the deployment
 
 Push changes to the connected GitHub branch. Render will build and deploy the

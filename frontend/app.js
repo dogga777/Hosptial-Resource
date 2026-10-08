@@ -315,7 +315,8 @@ async function runAction(button, url, label) {
     }
   } catch (error) {
     setStatus("Action failed", "error");
-    setTableMessage(`${label} failed. Check the backend/database connection and try again.`);
+    const detail = String(error.message || "Unknown network error").slice(0, 220);
+    setTableMessage(`${label} failed: ${detail}`);
     console.error(`${label} failed:`, error);
   } finally {
     button.disabled = false;
