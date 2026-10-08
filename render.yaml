@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: hospital-rebalancer
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: DB_NAME
+        value: hospital_rebalancer
+      - key: RESOURCE
+        value: oxygen_cylinders
+      - key: SHORTAGE_THRESHOLD_HOURS
+        value: "6"
+      - key: SAFETY_HOURS
+        value: "12"
+      - key: TRANSFER_TARGET_HOURS
+        value: "6"
+      - key: TRUCK_SPEED_KMH
+        value: "35"
+      - key: MONGO_URI
+        sync: false
